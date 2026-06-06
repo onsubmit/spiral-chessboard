@@ -64,11 +64,12 @@ export default function MainScene(): React.JSX.Element {
 
     const getState = (cx: number, cy: number): SquareState => {
       const key = `${cx},${cy}`;
-      if (!chessboard.has(key)) {
+      const square = chessboard.get(key);
+      if (!square) {
         chessboard.set(key, {});
       }
 
-      return chessboard.get(key);
+      return square ?? {};
     };
 
     const placePiece = (cx: number, cy: number, piece: Piece): void => {
