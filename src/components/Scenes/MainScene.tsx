@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { CanvasModel } from '../../CanvasModel';
+import type { Coordinate } from '../../Coordinate';
 import { Square } from '../../Drawables/Square';
-import { Knight } from '../../Pieces/Knight';
-import type { Piece } from '../../Pieces/Piece';
+import { Piece } from '../../Pieces/Piece';
+import PieceEditor, { type PieceEditorHandle } from '../PieceEditor';
 import { Scene, type SceneCanvases, type SceneProps } from './Scene';
 
 type SquareState = {
@@ -27,14 +28,26 @@ const directions: Array<[number, number]> = [
   [0, -1],
 ];
 
-const pieces: Array<Piece> = [new Knight('black'), new Knight('red')];
+const knightOffsets: Array<Coordinate> = [
+  { x: 1, y: 2 },
+  { x: 2, y: 1 },
+  { x: 2, y: -1 },
+  { x: 1, y: -2 },
+  { x: -1, y: -2 },
+  { x: -2, y: -1 },
+  { x: -2, y: 1 },
+  { x: -1, y: 2 },
+];
 
 export default function MainScene(): React.JSX.Element {
   const sceneCanvasesRef = useRef<SceneCanvases | null>(null);
   const canvasModelRef = useRef<CanvasModel | null>(null);
   const [sceneProps, setSceneProps] = useState<SceneProps | null>(null);
 
-  const draw = useCallback(() => {
+  const editor1Ref = useRef<PieceEditorHandle | null>(null);
+  const editor2Ref = useRef<PieceEditorHandle | null>(null);
+
+  const draw = useCallback((pieces: Array<Piece>) => {
     const canvasModel = canvasModelRef.current;
     if (!canvasModel) {
       return;
@@ -121,6 +134,25 @@ export default function MainScene(): React.JSX.Element {
     });
   }, []);
 
+  const handleReset = (): void => {
+    editor1Ref.current?.reset();
+    editor2Ref.current?.reset();
+    draw([
+      new Piece('#111111', ({ x, y }) =>
+        knightOffsets.map(({ x: dx, y: dy }) => ({ x: x + dx, y: y + dy })),
+      ),
+      new Piece('#cc0000', ({ x, y }) =>
+        knightOffsets.map(({ x: dx, y: dy }) => ({ x: x + dx, y: y + dy })),
+      ),
+    ]);
+  };
+
+  const handleRender = useCallback((): void => {
+    const p1 = editor1Ref.current?.getPiece();
+    const p2 = editor2Ref.current?.getPiece();
+    if (p1 && p2) draw([p1, p2]);
+  }, [draw]);
+
   useEffect(() => {
     if (!sceneCanvasesRef.current?.background) {
       return;
@@ -135,8 +167,44 @@ export default function MainScene(): React.JSX.Element {
       canvasModelRef.current = new CanvasModel(backgroundCanvasContext, CANVAS_SCALE, plane);
     }
 
-    draw();
-  }, [draw]);
+    handleRender();
+  }, [handleRender]);
 
-  return <Scene ref={sceneCanvasesRef} background={sceneProps?.background} />;
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: 16,
+        padding: 16,
+      }}
+    >
+      <div style={{ display: 'flex', gap: 32, alignItems: 'flex-start' }}>
+        <PieceEditor
+          ref={editor1Ref}
+          radius={3}
+          initialColor="#111111"
+          initialAttackOffsets={knightOffsets}
+        />
+        <PieceEditor
+          ref={editor2Ref}
+          radius={3}
+          initialColor="#cc0000"
+          initialAttackOffsets={knightOffsets}
+        />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignSelf: 'center' }}>
+          <button onClick={handleRender} style={{ padding: '8px 20px', fontSize: 14 }}>
+            Render
+          </button>
+          <button onClick={handleReset} style={{ padding: '8px 20px', fontSize: 14 }}>
+            Reset
+          </button>
+        </div>
+      </div>
+      <div style={{ position: 'relative' }}>
+        <Scene ref={sceneCanvasesRef} background={sceneProps?.background} />
+      </div>
+    </div>
+  );
 }

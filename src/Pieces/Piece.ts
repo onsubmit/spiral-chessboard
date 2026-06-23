@@ -1,6 +1,6 @@
 import type { Coordinate } from '../Coordinate';
 
-export abstract class Piece {
+export class Piece {
   readonly color: string;
   readonly getAttackCoordinates: (coordinate: Coordinate) => Array<Coordinate>;
 
