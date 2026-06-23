@@ -2,14 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { CanvasModel } from '../../CanvasModel';
 import { Square } from '../../Drawables/Square';
+import { Knight } from '../../Pieces/Knight';
+import type { Piece } from '../../Pieces/Piece';
 import { Scene, type SceneCanvases, type SceneProps } from './Scene';
-
-type Piece = 'black' | 'red';
 
 type SquareState = {
   piece?: Piece;
-  attackedByBlack?: boolean;
-  attackedByRed?: boolean;
+  attackedBy: Set<string>;
 };
 
 const CANVAS_SCALE = 1;
@@ -27,6 +26,8 @@ const directions: Array<[number, number]> = [
   [-1, 0],
   [0, -1],
 ];
+
+const pieces: Array<Piece> = [new Knight('black'), new Knight('red')];
 
 export default function MainScene(): React.JSX.Element {
   const sceneCanvasesRef = useRef<SceneCanvases | null>(null);
@@ -46,7 +47,7 @@ export default function MainScene(): React.JSX.Element {
     let dirIndex = 0;
     let runLength = 1;
     while (spiralPath.length < numPoints) {
-      const [dx, dy] = directions[dirIndex % 4];
+      const [dx, dy] = directions[dirIndex % 4]!;
       for (let step = 0; step < runLength && spiralPath.length < numPoints; step++) {
         spiralPath.push([x, y]);
         x += dx;
@@ -59,53 +60,45 @@ export default function MainScene(): React.JSX.Element {
       }
     }
 
-    // Place knights along the spiral
+    // Place pieces along the spiral
     const chessboard = new Map<string, SquareState>();
 
     const getState = (cx: number, cy: number): SquareState => {
       const key = `${cx},${cy}`;
-      if (!chessboard.has(key)) {
-        chessboard.set(key, {});
-      }
-
-      return chessboard.get(key)!;
+      const existing = chessboard.get(key);
+      if (existing) return existing;
+      const state: SquareState = { attackedBy: new Set() };
+      chessboard.set(key, state);
+      return state;
     };
 
     const placePiece = (cx: number, cy: number, piece: Piece): void => {
       getState(cx, cy).piece = piece;
-      for (const [ax, ay] of getKnightAttackCoordinates(cx, cy)) {
-        const state = getState(ax, ay);
-        if (piece === 'black') {
-          state.attackedByBlack = true;
-        } else {
-          state.attackedByRed = true;
-        }
+      for (const { x: ax, y: ay } of piece.getAttackCoordinates({ x: cx, y: cy })) {
+        getState(ax, ay).attackedBy.add(piece.color);
       }
     };
 
-    // Black knight always starts at (0,0)
-    placePiece(0, 0, 'black');
+    // First piece always starts at (0,0)
+    placePiece(0, 0, pieces[0]!);
 
-    let nextPiece: Piece = 'red';
-    let blackPtr = 1;
-    let redPtr = 1;
+    const ptrs = pieces.map(() => 1);
+    let pieceIndex = 1;
     let canPlace = true;
     while (canPlace) {
       canPlace = false;
-      const start = nextPiece === 'black' ? blackPtr : redPtr;
-      for (let i = start; i < spiralPath.length; i++) {
-        const [sx, sy] = spiralPath[i];
-        const state = chessboard.get(`${sx},${sy}`) ?? {};
-        const blockedByOpponent = nextPiece === 'red' ? state.attackedByBlack : state.attackedByRed;
-        if (!state.piece && !blockedByOpponent) {
-          placePiece(sx, sy, nextPiece);
-          if (nextPiece === 'black') {
-            blackPtr = i + 1;
-          } else {
-            redPtr = i + 1;
-          }
+      const piece = pieces[pieceIndex % pieces.length]!;
+      const opponents = pieces.filter((_, i) => i % pieces.length !== pieceIndex % pieces.length);
+      const ptr = ptrs[pieceIndex % pieces.length]!;
 
-          nextPiece = nextPiece === 'red' ? 'black' : 'red';
+      for (let i = ptr; i < spiralPath.length; i++) {
+        const [sx, sy] = spiralPath[i]!;
+        const state = chessboard.get(`${sx},${sy}`);
+        const attackedByOpponent = opponents.some((op) => state?.attackedBy.has(op.color));
+        if (!state?.piece && !attackedByOpponent) {
+          placePiece(sx, sy, piece);
+          ptrs[pieceIndex % pieces.length] = i + 1;
+          pieceIndex++;
           canPlace = true;
           break;
         }
@@ -115,9 +108,8 @@ export default function MainScene(): React.JSX.Element {
     // Draw squares
     const drawables: Array<Square> = [];
     for (const [px, py] of spiralPath) {
-      const state = chessboard.get(`${px},${py}`) ?? {};
-      const color = state.piece ?? 'white';
-
+      const state = chessboard.get(`${px},${py}`);
+      const color = state?.piece?.color ?? 'white';
       drawables.push(new Square({ bottomLeft: { x: px, y: py }, size: 1, color }));
     }
 
@@ -147,17 +139,4 @@ export default function MainScene(): React.JSX.Element {
   }, [draw]);
 
   return <Scene ref={sceneCanvasesRef} background={sceneProps?.background} />;
-}
-
-function getKnightAttackCoordinates(x: number, y: number): Array<[number, number]> {
-  return [
-    [x + 1, y + 2],
-    [x + 2, y + 1],
-    [x + 2, y - 1],
-    [x + 1, y - 2],
-    [x - 1, y - 2],
-    [x - 2, y - 1],
-    [x - 2, y + 1],
-    [x - 1, y + 2],
-  ];
 }
